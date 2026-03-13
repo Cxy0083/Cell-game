@@ -1,484 +1,184 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html>
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-  <title>细胞进化游戏</title>
-  <style>
-    html, body {
-      margin: 0;
-      padding: 0;
-      background: #08152f;
-      overflow: hidden;
-      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
-      touch-action: none;
-    }
 
-    #ui {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      z-index: 10;
-      color: #fff;
-      padding: 12px 14px 8px;
-      background: linear-gradient(to bottom, rgba(0,0,0,.35), rgba(0,0,0,0));
-      pointer-events: none;
-    }
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 
-    #title {
-      font-size: 22px;
-      font-weight: 700;
-      margin-bottom: 6px;
-    }
+<title>细胞进化游戏</title>
 
-    #row {
-      display: flex;
-      justify-content: space-between;
-      gap: 10px;
-      font-size: 15px;
-      line-height: 1.4;
-      flex-wrap: wrap;
-    }
+<style>
 
-    #tip {
-      margin-top: 6px;
-      font-size: 12px;
-      opacity: .85;
-    }
+body{
+margin:0;
+background:#08152f;
+overflow:hidden;
+font-family:sans-serif;
+}
 
-    #msg {
-      position: fixed;
-      inset: 0;
-      display: none;
-      align-items: center;
-      justify-content: center;
-      z-index: 20;
-      background: rgba(0,0,0,.55);
-      color: #fff;
-      text-align: center;
-      padding: 24px;
-    }
+#score{
+position:absolute;
+top:10px;
+left:10px;
+color:white;
+font-size:22px;
+z-index:10;
+}
 
-    #msgBox {
-      background: rgba(10, 22, 50, .95);
-      border: 1px solid rgba(255,255,255,.12);
-      border-radius: 18px;
-      padding: 22px 18px;
-      max-width: 300px;
-      box-shadow: 0 10px 30px rgba(0,0,0,.3);
-    }
+canvas{
+display:block;
+}
 
-    #msgTitle {
-      font-size: 26px;
-      font-weight: 800;
-      margin-bottom: 10px;
-    }
+</style>
 
-    #msgText {
-      font-size: 16px;
-      line-height: 1.6;
-      opacity: .95;
-    }
-
-    #restartBtn {
-      margin-top: 16px;
-      border: none;
-      border-radius: 999px;
-      padding: 10px 18px;
-      font-size: 16px;
-      font-weight: 700;
-      background: #57c7ff;
-      color: #05203b;
-    }
-
-    canvas {
-      display: block;
-    }
-  </style>
 </head>
+
 <body>
-  <div id="ui">
-    <div id="title">细胞进化游戏</div>
-    <div id="row">
-      <div id="score">分数：0</div>
-      <div id="next">下一颗：精原细胞</div>
-    </div>
-    <div id="tip">左右移动手指控制位置，点一下放下细胞。目标：精子 + 卵细胞 → 受精卵</div>
-  </div>
-
-  <div id="msg">
-    <div id="msgBox">
-      <div id="msgTitle"></div>
-      <div id="msgText"></div>
-      <button id="restartBtn">重新开始</button>
-    </div>
-  </div>
-
-  <canvas id="game"></canvas>
-
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
-  <script>
-    const {
-      Engine, Render, Runner, World, Bodies, Body, Events
-    } = Matter;
-
-    const CELL_DATA = {
-      spermatogonium: { name: "精原细胞", color: "#57c7ff", r: 24, next: "primary_spermatocyte", score: 10 },
-      primary_spermatocyte: { name: "初级精母细胞", color: "#39b4ff", r: 28, next: "secondary_spermatocyte", score: 20 },
-      secondary_spermatocyte: { name: "次级精母细胞", color: "#229ef0", r: 31, next: "spermatid", score: 30 },
-      spermatid: { name: "精细胞", color: "#0d86dd", r: 34, next: "sperm", score: 50 },
-      sperm: { name: "精子", color: "#ffe08a", r: 30, next: null, score: 80 },
-
-      oogonium: { name: "卵原细胞", color: "#ff9fcf", r: 24, next: "primary_oocyte", score: 10 },
-      primary_oocyte: { name: "初级卵母细胞", color: "#ff84bc", r: 29, next: "secondary_oocyte", score: 20 },
-      secondary_oocyte: { name: "次级卵母细胞", color: "#ff69ac", r: 34, next: "ovum", score: 40 },
-      ovum: { name: "卵细胞", color: "#ffcf5a", r: 40, next: null, score: 80 },
-
-      zygote: { name: "受精卵", color: "#8dff98", r: 46, next: null, score: 300 }
-    };
-
-    const START_TYPES = ["spermatogonium", "oogonium"];
-
-    const canvas = document.getElementById("game");
-    const scoreEl = document.getElementById("score");
-    const nextEl = document.getElementById("next");
-    const msg = document.getElementById("msg");
-    const msgTitle = document.getElementById("msgTitle");
-    const msgText = document.getElementById("msgText");
-    const restartBtn = document.getElementById("restartBtn");
-
-    function resizeCanvas() {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-    }
-    resizeCanvas();
-
-    const engine = Engine.create();
-    engine.world.gravity.y = 1.05;
-    const world = engine.world;
-
-    const render = Render.create({
-      canvas,
-      engine,
-      options: {
-        width: canvas.width,
-        height: canvas.height,
-        wireframes: false,
-        background: "#08152f"
-      }
-    });
-
-    Render.run(render);
-    const runner = Runner.create();
-    Runner.run(runner, engine);
-
-    let score = 0;
-    let gameOver = false;
-    let canDrop = true;
-    let previewX = canvas.width / 2;
-    let nextType = randomStartType();
-    let walls = [];
-    let cells = [];
-
-    function randomStartType() {
-      return START_TYPES[Math.floor(Math.random() * START_TYPES.length)];
-    }
-
-    function updateScore(v) {
-      score += v;
-      scoreEl.textContent = "分数：" + score;
-    }
-
-    function updateNextText() {
-      nextEl.textContent = "下一颗：" + CELL_DATA[nextType].name;
-    }
-
-    function showMessage(title, text) {
-      msgTitle.textContent = title;
-      msgText.textContent = text;
-      msg.style.display = "flex";
-    }
-
-    function hideMessage() {
-      msg.style.display = "none";
-    }
-
-    function createWalls() {
-      walls.forEach(w => World.remove(world, w));
-      walls = [];
-
-      const w = canvas.width;
-      const h = canvas.height;
-      const thickness = 60;
-
-      const ground = Bodies.rectangle(w / 2, h + thickness / 2 - 4, w, thickness, {
-        isStatic: true,
-        render: { fillStyle: "#163056" }
-      });
-
-      const leftWall = Bodies.rectangle(-thickness / 2 + 8, h / 2, thickness, h, {
-        isStatic: true,
-        render: { fillStyle: "#163056" }
-      });
-
-      const rightWall = Bodies.rectangle(w + thickness / 2 - 8, h / 2, thickness, h, {
-        isStatic: true,
-        render: { fillStyle: "#163056" }
-      });
-
-      walls.push(ground, leftWall, rightWall);
-      World.add(world, walls);
-    }
-
-    function createCell(type, x, y) {
-      const data = CELL_DATA[type];
-      const body = Bodies.circle(x, y, data.r, {
-        restitution: 0.18,
-        friction: 0.02,
-        frictionAir: 0.002,
-        density: 0.0015,
-        label: "cell",
-        render: {
-          fillStyle: data.color
-        }
-      });
-
-      body.cellType = type;
-      body.merged = false;
-      cells.push(body);
-      World.add(world, body);
-      return body;
-    }
-
-    function spawnNext() {
-      if (gameOver || !canDrop) return;
-
-      canDrop = false;
-      createCell(nextType, previewX, 110);
-      nextType = randomStartType();
-      updateNextText();
-
-      setTimeout(() => {
-        canDrop = true;
-      }, 300);
-    }
-
-    function mergeCells(a, b, newType) {
-      if (!a || !b || a.merged || b.merged) return;
-      a.merged = true;
-      b.merged = true;
-
-      const x = (a.position.x + b.position.x) / 2;
-      const y = (a.position.y + b.position.y) / 2;
-
-      World.remove(world, a);
-      World.remove(world, b);
-      cells = cells.filter(c => c !== a && c !== b);
-
-      const newBody = createCell(newType, x, y);
-      updateScore(CELL_DATA[newType].score);
-
-      if (newType === "zygote") {
-        gameOver = true;
-        setTimeout(() => {
-          showMessage("受精成功", "精子和卵细胞结合，形成了受精卵。");
-        }, 350);
-      }
-
-      return newBody;
-    }
-
-    function isSameMergeType(a, b) {
-      return a.cellType === b.cellType && CELL_DATA[a.cellType].next;
-    }
-
-    function isFertilizationPair(a, b) {
-      return (
-        (a.cellType === "sperm" && b.cellType === "ovum") ||
-        (a.cellType === "ovum" && b.cellType === "sperm")
-      );
-    }
-
-    Events.on(engine, "collisionStart", (event) => {
-      if (gameOver) return;
-
-      for (const pair of event.pairs) {
-        const a = pair.bodyA;
-        const b = pair.bodyB;
-
-        if (a.label !== "cell" || b.label !== "cell") continue;
-        if (a.merged || b.merged) continue;
-
-        if (isSameMergeType(a, b)) {
-          const next = CELL_DATA[a.cellType].next;
-          mergeCells(a, b, next);
-          continue;
-        }
-
-        if (isFertilizationPair(a, b)) {
-          mergeCells(a, b, "zygote");
-          continue;
-        }
-      }
-    });
-
-    Events.on(render, "afterRender", () => {
-      const ctx = render.context;
-      const w = canvas.width;
-      const h = canvas.height;
-
-      // 顶部危险线
-      ctx.save();
-      ctx.strokeStyle = "rgba(255,100,100,0.35)";
-      ctx.lineWidth = 2;
-      ctx.setLineDash([8, 8]);
-      ctx.beginPath();
-      ctx.moveTo(14, 130);
-      ctx.lineTo(w - 14, 130);
-      ctx.stroke();
-      ctx.restore();
-
-      // 投放预览线
-      if (!gameOver) {
-        ctx.save();
-        ctx.strokeStyle = "rgba(255,255,255,0.18)";
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(previewX, 90);
-        ctx.lineTo(previewX, h - 70);
-        ctx.stroke();
-        ctx.restore();
-
-        ctx.save();
-        const preview = CELL_DATA[nextType];
-        ctx.globalAlpha = 0.55;
-        ctx.fillStyle = preview.color;
-        ctx.beginPath();
-        ctx.arc(previewX, 80, preview.r * 0.55, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-      }
-
-      // 细胞文字与精子尾巴
-      ctx.save();
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-
-      for (const body of cells) {
-        const d = CELL_DATA[body.cellType];
-        const x = body.position.x;
-        const y = body.position.y;
-
-        if (body.cellType === "sperm") {
-          const angle = body.angle;
-          const tailLen = 24;
-          const tx = x - Math.cos(angle) * (d.r + tailLen);
-          const ty = y - Math.sin(angle) * (d.r + tailLen);
-
-          ctx.strokeStyle = "#ffe08a";
-          ctx.lineWidth = 3;
-          ctx.beginPath();
-          ctx.moveTo(x - Math.cos(angle) * d.r * 0.7, y - Math.sin(angle) * d.r * 0.7);
-          ctx.quadraticCurveTo(
-            x - Math.cos(angle) * (d.r + 10),
-            y - Math.sin(angle) * (d.r + 5) + Math.sin(Date.now() / 120) * 4,
-            tx,
-            ty
-          );
-          ctx.stroke();
-        }
-
-        ctx.fillStyle = body.cellType === "zygote" ? "#093014" : "#08243f";
-        ctx.font = `bold ${body.cellType === "zygote" ? 14 : 11}px sans-serif`;
-
-        const text = d.name;
-        const maxWidth = d.r * 1.7;
-
-        if (text.length <= 4) {
-          ctx.fillText(text, x, y);
-        } else {
-          const first = text.slice(0, Math.ceil(text.length / 2));
-          const second = text.slice(Math.ceil(text.length / 2));
-          ctx.fillText(first, x, y - 7);
-          ctx.fillText(second, x, y + 8);
-        }
-      }
-      ctx.restore();
-    });
-
-    function checkLose() {
-      if (gameOver) return;
-      for (const c of cells) {
-        if (c.position.y < 125 && Math.abs(c.velocity.y) < 0.6) {
-          gameOver = true;
-          showMessage("游戏结束", "细胞堆得太高了，还没有完成受精。");
-          break;
-        }
-      }
-    }
-
-    function clampPreviewX(x) {
-      previewX = Math.max(34, Math.min(canvas.width - 34, x));
-    }
-
-    function onTouchMove(e) {
-      const t = e.touches[0];
-      if (!t) return;
-      clampPreviewX(t.clientX);
-    }
-
-    function onTouchStart(e) {
-      const t = e.touches[0];
-      if (!t) return;
-      clampPreviewX(t.clientX);
-    }
-
-    function onTouchEnd() {
-      spawnNext();
-    }
-
-    function onMouseMove(e) {
-      clampPreviewX(e.clientX);
-    }
-
-    function onMouseDown(e) {
-      clampPreviewX(e.clientX);
-      spawnNext();
-    }
-
-    canvas.addEventListener("touchstart", onTouchStart, { passive: false });
-    canvas.addEventListener("touchmove", (e) => {
-      e.preventDefault();
-      onTouchMove(e);
-    }, { passive: false });
-    canvas.addEventListener("touchend", (e) => {
-      e.preventDefault();
-      onTouchEnd();
-    }, { passive: false });
-
-    canvas.addEventListener("mousemove", onMouseMove);
-    canvas.addEventListener("mousedown", onMouseDown);
-
-    restartBtn.addEventListener("click", () => {
-      location.reload();
-    });
-
-    window.addEventListener("resize", () => {
-      resizeCanvas();
-      render.canvas.width = canvas.width;
-      render.canvas.height = canvas.height;
-      render.options.width = canvas.width;
-      render.options.height = canvas.height;
-      createWalls();
-      clampPreviewX(previewX);
-    });
-
-    createWalls();
-    updateNextText();
-    clampPreviewX(canvas.width / 2);
-
-    setInterval(checkLose, 300);
-  </script>
+
+<div id="score">Score:0</div>
+
+<canvas id="game"></canvas>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+
+<script>
+
+const {Engine,Render,Runner,World,Bodies,Events,Body} = Matter;
+
+const engine = Engine.create();
+const world = engine.world;
+
+const canvas = document.getElementById("game");
+
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+const render = Render.create({
+canvas:canvas,
+engine:engine,
+options:{
+width:canvas.width,
+height:canvas.height,
+wireframes:false,
+background:"#08152f"
+}
+});
+
+Render.run(render);
+
+const runner = Runner.create();
+Runner.run(runner,engine);
+
+let score=0;
+
+function addScore(n){
+score+=n;
+document.getElementById("score").innerText="Score:"+score;
+}
+
+const ground = Bodies.rectangle(
+canvas.width/2,
+canvas.height,
+canvas.width,
+40,
+{isStatic:true}
+);
+
+World.add(world,ground);
+
+let cells=[];
+
+const types=[
+"精原细胞",
+"初级精母细胞",
+"次级精母细胞",
+"精细胞",
+"精子",
+"卵原细胞",
+"初级卵母细胞",
+"次级卵母细胞",
+"卵细胞",
+"受精卵"
+];
+
+function spawn(x,type=0){
+
+let r=20+type*3;
+
+let color="#3bb4ff";
+
+if(type==4) color="#ffe08a";
+if(type==8) color="#ffd95a";
+if(type==9) color="#8cff9c";
+
+let body=Bodies.circle(
+x,
+60,
+r,
+{
+label:type,
+restitution:0.2,
+render:{fillStyle:color}
+}
+);
+
+cells.push(body);
+World.add(world,body);
+
+}
+
+canvas.addEventListener("click",e=>{
+spawn(e.clientX,Math.floor(Math.random()*4));
+});
+
+canvas.addEventListener("touchstart",e=>{
+let x=e.touches[0].clientX;
+spawn(x,Math.floor(Math.random()*4));
+});
+
+Events.on(engine,"collisionStart",function(e){
+
+let pairs=e.pairs;
+
+pairs.forEach(pair=>{
+
+let a=pair.bodyA;
+let b=pair.bodyB;
+
+if(a.label===b.label && a.label<8){
+
+let newType=a.label+1;
+
+World.remove(world,a);
+World.remove(world,b);
+
+spawn(a.position.x,newType);
+
+addScore(10);
+
+}
+
+if(
+(a.label==4 && b.label==8) ||
+(a.label==8 && b.label==4)
+){
+
+World.remove(world,a);
+World.remove(world,b);
+
+spawn(a.position.x,9);
+
+addScore(100);
+
+alert("受精成功！生成受精卵");
+
+}
+
+});
+
+});
+
+</script>
+
 </body>
 </html>
