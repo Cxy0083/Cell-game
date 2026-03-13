@@ -1,2 +1,165 @@
 # Cell-game
 cell evolution game
+<index. html>
+<html>
+<head>
+
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<title>细胞进化</title>
+
+<style>
+
+body{
+margin:0;
+background:#0f172a;
+overflow:hidden;
+}
+
+canvas{
+display:block;
+}
+
+#score{
+position:absolute;
+top:10px;
+left:10px;
+color:white;
+font-size:20px;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<div id="score">Score:0</div>
+
+<canvas id="game"></canvas>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+
+<script>
+
+const {Engine,Render,Runner,World,Bodies,Events} = Matter;
+
+const engine = Engine.create();
+const world = engine.world;
+
+const canvas = document.getElementById("game");
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+const render = Render.create({
+canvas:canvas,
+engine:engine,
+options:{
+width:canvas.width,
+height:canvas.height,
+wireframes:false,
+background:"#0f172a"
+}
+});
+
+Render.run(render);
+
+const runner = Runner.create();
+Runner.run(runner,engine);
+
+let score=0;
+
+function addScore(n){
+
+score+=n;
+document.getElementById("score").innerText="Score:"+score;
+
+}
+
+const ground = Bodies.rectangle(
+canvas.width/2,
+canvas.height,
+canvas.width,
+40,
+{isStatic:true}
+);
+
+World.add(world,ground);
+
+let cells=[];
+
+const types=[
+"精原细胞",
+"初级精母细胞",
+"次级精母细胞",
+"精细胞",
+"精子",
+"卵原细胞",
+"初级卵母细胞",
+"次级卵母细胞",
+"卵细胞"
+];
+
+function spawn(x,type=0){
+
+let r=20+type*2;
+
+let body=Bodies.circle(
+x,
+50,
+r,
+{
+label:type,
+restitution:0.2
+}
+);
+
+cells.push(body);
+
+World.add(world,body);
+
+}
+
+canvas.addEventListener("touchstart",e=>{
+
+let x=e.touches[0].clientX;
+
+spawn(x,Math.floor(Math.random()*4));
+
+});
+
+Events.on(engine,"collisionStart",function(e){
+
+let pairs=e.pairs;
+
+pairs.forEach(pair=>{
+
+let a=pair.bodyA;
+let b=pair.bodyB;
+
+if(a.label==b.label){
+
+let newType=a.label+1;
+
+if(newType<types.length){
+
+World.remove(world,a);
+World.remove(world,b);
+
+spawn(a.position.x,newType);
+
+addScore(10);
+
+}
+
+}
+
+});
+
+});
+
+</script>
+
+</body>
+</html>
