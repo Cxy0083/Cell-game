@@ -65,7 +65,29 @@ background:"#08152f"
 });
 
 Render.run(render);
+Matter.Events.on(render, "afterRender", function(){
 
+let ctx = render.context;
+
+cells.forEach(cell=>{
+
+let label = types[cell.label];
+
+if(!label) return;
+
+ctx.fillStyle="white";
+ctx.font="12px sans-serif";
+ctx.textAlign="center";
+
+ctx.fillText(
+label,
+cell.position.x,
+cell.position.y+4
+);
+
+});
+
+});
 const runner = Runner.create();
 Runner.run(runner,engine);
 
